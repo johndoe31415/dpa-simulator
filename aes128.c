@@ -59,6 +59,7 @@ static void aes_xor_bytes(void *vdest, const void *vsrc, unsigned int length) {
 	}
 }
 
+#ifdef DEBUG
 static void aes_dump_data(const void *data, unsigned int len, char *name) {
 	if (name) {
 		printf("%s = ", name);
@@ -70,6 +71,7 @@ static void aes_dump_data(const void *data, unsigned int len, char *name) {
 		printf("\n");
 	}
 }
+#endif
 
 static void aes_sub_bytes(uint8_t block[static 16]) {
 	for (unsigned int i = 0; i < 16; i++) {
@@ -197,6 +199,7 @@ static void aes128_key_schedule(struct aes128_ctx_t *ctx, const uint8_t key[stat
 	}
 }
 
+#ifdef DEBUG
 void aes128_dump(const struct aes128_ctx_t *ctx) {
 	for (unsigned int rnd = 0; rnd < AES_ROUNDS; rnd++) {
 		printf("Round %2d: ", rnd);
@@ -204,6 +207,7 @@ void aes128_dump(const struct aes128_ctx_t *ctx) {
 		printf("\n");
 	}
 }
+#endif
 
 void aes128_init(struct aes128_ctx_t *ctx, const uint8_t key[static 16]) {
 	aes128_key_schedule(ctx, key);
