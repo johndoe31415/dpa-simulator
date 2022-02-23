@@ -29,6 +29,7 @@ static void dump_block(const uint8_t block[static 16]) {
 int main(int argc, char **argv) {
 	struct testcase_t testcases[] = {
 //		{ .key = "2b7e151628aed2a6abf7158809cf4f3c", .plaintext = "6bc0bce12a459991e134741a7f9e1925", .ciphertext = "00000000000000000000000000000000" },
+		{ .key = "00000000000000000000000000000000", .plaintext = "00000000000000000000000000000000", .ciphertext = "66e94bd4ef8a2c3b884cfa59ca342b2e" },
 		{ .key = "2136d17d62680a95b5f3facd615a76e1", .plaintext = "7507b47404e07900ad676892ccdd1a14", .ciphertext = "ee3926758f9ff0d0d6393fc64dc886cd" },
 		{ .key = "61061a275f47f2319dbc6cd9231e8cd7", .plaintext = "971c7d762a4c7459fda3b96fa3aba29c", .ciphertext = "f287371107989ba0775af501035399df" },
 		{ .key = "4a851208a2c83b4977b9fe3919c2dd42", .plaintext = "e232b27cc7dd974eb2e9345b6de0a24e", .ciphertext = "d9c2199256cbece5bed22b6aa1b35723" },

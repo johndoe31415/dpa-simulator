@@ -15,6 +15,7 @@ def aes128_ecb_enc(plaintext, key):
 	return ciphertext
 
 
+print(aes128_ecb_enc(bytes(16),bytes(16)).hex())
 for i in range(16):
 	k = os.urandom(16)
 	p = os.urandom(16)
