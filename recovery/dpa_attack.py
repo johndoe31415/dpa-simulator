@@ -22,6 +22,8 @@
 
 import sys
 import subprocess
+import threading
+import collections
 from FriendlyArgumentParser import FriendlyArgumentParser, baseint
 from Tracefile import Tracefile
 
@@ -49,7 +51,7 @@ class DPAAttack():
 		self._args = args
 		self._tracefile = Tracefile(self._args.tracefile)
 		self._key = bytearray(16)
-		self._keyguess_best_metric = { }
+		self._keyguess_metrics = collections.defaultdict(dict)
 
 	@property
 	def key(self):
@@ -94,6 +96,23 @@ class DPAAttack():
 			moving_avg.append(bucketsum / len(bucket))
 		return moving_avg
 
+	def _plot_filename(self, i, K):
+		plotfile = "plots/K_%02d_%02x.txt" % (i, K)
+		return plotfile
+
+	def _execute(self, cmd, input = None):
+		def _thread_fnc():
+			return subprocess.check_output(cmd, input = input)
+		thread = threading.Thread(target = _thread_fnc)
+		thread.start()
+
+	def _get_best_keyguess_metrics(self, i, n):
+		tuples = [ (metric, keyguess) for (keyguess, metric) in self._keyguess_metrics[i].items() ]
+		tuples.sort()
+		return tuples[:n]
+
+	def _get_best_keyguess_metric(self, i):
+		return self._get_best_keyguess_metrics(i, 1)[0]
 
 	def _attack_keybyte_with_guess(self, i, K):
 		low_traces = [ ]
@@ -140,37 +159,48 @@ class DPAAttack():
 			avg_high = self._avg_trace(high_traces)
 			diff = self._diff_trace(avg_high, avg_low)
 			metric = max(diff)
-			if self._best_guess is None:
-				self._best_guess = (K, metric)
-			elif metric > self._best_guess[1]:
-				self._best_guess = (K, metric)
-			print("Attacking keybyte %d with guess K = %02x: %3d low and %3d high candidates; used %d traces of %d available (%.0f%%), grouped %d of those (%.0f%%); max diff %6.3f (best %02x %6.3f)" % (i, K, len(low_traces), len(high_traces), used_trace_count, self._tracefile.total_trace_count, used_trace_count / self._tracefile.total_trace_count * 100, len(low_traces) + len(high_traces), (len(low_traces) + len(high_traces)) / used_trace_count * 100, metric, self._best_guess[0], self._best_guess[1]))
+			self._keyguess_metrics[i][K] = metric
+			(best_metric, best_keyguess) = self._get_best_keyguess_metric(i)
+			print("Attacking keybyte %d with guess K = %02x: %3d low and %3d high candidates; used %d traces of %d available (%.0f%%), grouped %d of those (%.0f%%); max diff %6.3f (best %02x %6.3f)" % (i, K, len(low_traces), len(high_traces), used_trace_count, self._tracefile.total_trace_count, used_trace_count / self._tracefile.total_trace_count * 100, len(low_traces) + len(high_traces), (len(low_traces) + len(high_traces)) / used_trace_count * 100, metric, best_keyguess, best_metric))
 
 			if self._args.create_plots:
-				plotfile = "plots/K_%02d_%02x.txt" % (i, K)
+				plotfile = self._plot_filename(i, K)
 				with open(plotfile, "w") as f:
 					for value in diff:
 						print(value, file = f)
 
-				subprocess.check_output([ "gnuplot" ], input = ("""
+				self._execute([ "gnuplot" ], input = ("""
 					set terminal pngcairo size 1920,1080 enhanced
 					set yrange [ -8 : 8 ]
 					set output '%s.png'
 					plot '%s' with lines
 				""" % (plotfile, plotfile)).encode())
 
-			self._key[i] = self._best_guess[0]
-			self._keyguess_best_metric[i] = self._best_guess[1]
-
-
 	def _attack_keybyte(self, i):
 		self._best_guess = None
-		if len(self._args.keybyte_guess) == 0:
-			for K in range(256):
-				self._attack_keybyte_with_guess(i, K)
-		else:
-			for K in self._args.keybyte_guess:
-				self._attack_keybyte_with_guess(i, K)
+		guesses = list(range(256)) if (len(self._args.keybyte_guess) == 0) else self._args.keybyte_guess
+		for K in guesses:
+			self._attack_keybyte_with_guess(i, K)
+		(metric, keybyte) = self._get_best_keyguess_metric(i)
+		self._key[i] = keybyte
+
+		if self._args.create_plots:
+			all_plot_pngfile = "plots/K_%02d.png" % (i)
+			show_K = set(keybyte for (metric, keybyte) in self._get_best_keyguess_metrics(i, 5))
+
+			plot_filenames = [ ]
+			for K in guesses:
+				if K not in show_K:
+					plot_filenames.append((self._plot_filename(i, K), "notitle"))
+				else:
+					plot_filenames.append((self._plot_filename(i, K), "title 'K %02x'" % (K)))
+			plotcmd = ", ".join("'%s' with lines %s" % (filename, extra) for (filename, extra) in plot_filenames)
+			self._execute([ "gnuplot" ], input = ("""
+				set terminal pngcairo size 1920,1080 enhanced
+				set yrange [ -10 : 10 ]
+				set output '%s'
+				plot %s
+			""" % (all_plot_pngfile, plotcmd)).encode())
 
 
 	def attack(self):
@@ -188,10 +218,11 @@ class DPAAttack():
 
 	def print_results(self):
 		print("Recovered key after attack: %s" % (" ".join("%02x" % (x) for x in self._key)))
-		for (keybyte, metric) in sorted(self._keyguess_best_metric.items()):
-			text = "   %2d [%02x] metric %6.3f" % (keybyte, self._key[keybyte], metric)
+		for i in self._keyguess_metrics:
+			(metric, keybyte) = self._get_best_keyguess_metric(i)
+			text = "   %2d [%02x] metric %6.3f" % (keybyte, self._key[i], metric)
 			if self._tracefile.correct_key is not None:
-				text += "  actual is [%02x] %s" % (self._tracefile.correct_key[keybyte], [ "FAIL", "" ][self._key[keybyte] == self._tracefile.correct_key[keybyte]])
+				text += "  actual is [%02x] %s" % (self._tracefile.correct_key[i], [ "FAIL", "" ][self._key[i] == self._tracefile.correct_key[i]])
 			print(text)
 
 

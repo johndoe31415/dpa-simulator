@@ -66,12 +66,75 @@ Attacking keybyte 0 with guess K = 0b:  81 low and  54 high candidates; used 201
 Attacking keybyte 0 with guess K = 0c:  83 low and  52 high candidates; used 2010 traces of 2010 available (100%), grouped 135 of those (7%); max diff  1.263 (best 00  2.137)
 Attacking keybyte 0 with guess K = 0d:  98 low and  57 high candidates; used 2010 traces of 2010 available (100%), grouped 155 of those (8%); max diff  1.206 (best 00  2.137)
 [...]
+Attacking keybyte 15 with guess K = fc: 104 low and  59 high candidates; used 2010 traces of 2010 available (100%), grouped 163 of those (8%); max diff  1.772 (best e0  6.000)
+Attacking keybyte 15 with guess K = fd:  87 low and  62 high candidates; used 2010 traces of 2010 available (100%), grouped 149 of those (7%); max diff  1.254 (best e0  6.000)
+Attacking keybyte 15 with guess K = fe: 102 low and  51 high candidates; used 2010 traces of 2010 available (100%), grouped 153 of those (8%); max diff  2.588 (best e0  6.000)
+Attacking keybyte 15 with guess K = ff:  84 low and  61 high candidates; used 2010 traces of 2010 available (100%), grouped 145 of those (7%); max diff  1.237 (best e0  6.000)
+Recovered key after attack: a6 17 db 75 31 0a 5f 1c c7 24 1b fc d9 cb 93 e0
+    0 [a6] metric  6.000  actual is [a6]
+    1 [17] metric  6.000  actual is [17]
+    2 [db] metric  6.000  actual is [db]
+    3 [75] metric  6.000  actual is [75]
+    4 [31] metric  6.000  actual is [31]
+    5 [0a] metric  6.000  actual is [0a]
+    6 [5f] metric  6.000  actual is [5f]
+    7 [1c] metric  6.000  actual is [1c]
+    8 [c7] metric  6.000  actual is [c7]
+    9 [24] metric  6.000  actual is [24]
+   10 [1b] metric  6.000  actual is [1b]
+   11 [fc] metric  6.000  actual is [fc]
+   12 [d9] metric  6.000  actual is [d9]
+   13 [cb] metric  6.000  actual is [cb]
+   14 [93] metric  6.000  actual is [93]
+   15 [e0] metric  6.000  actual is [e0]
 ```
 
 The attack is deliberately simple: It makes, based on plaintext and keyguess,
 an estimate about the Hamming weight change of the S-box substitution. It only
 considers those traces that have either 1 or 7 bits flipped and groups them to
 build the differential average trace. Then it looks for a peak in that trace.
+
+The tool offers many other options, see the internal help page. For example,
+you can limit the number of traces to see how many you need until the attack
+fails, you can average the traces before to smudge out the peak, you can limit
+the keybyte or key guesses to specific values and create nice gnuplot graphs.
+Here's the whole list of things it can do:
+
+```
+usage: dpa_attack.py [-h] [-k hex] [-g value] [-a samples] [-r] [-p]
+                     [-n count] [-i index] [-v]
+                     tracefile_json
+
+Educational tool to demonstrate differential power analysis.
+
+positional arguments:
+  tracefile_json        The JSON source file which contains all
+                        collected/simulated traces
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -k hex, --correct-key hex
+                        Use this is the known correct key. Must be given in
+                        hex notation.
+  -g value, --keybyte-guess value
+                        Try only these keybyte guesses. Can be specified more
+                        than once. By default, all values are tried.
+  -a samples, --moving-average samples
+                        Before investigating traces, compute their moving
+                        average using this number of samples. Defaults to 1.
+  -r, --randomize       Randomly shuffle traces before starting.
+  -p, --create-plots    Create gnuplot plots for each diffential trace.
+  -n count, --max-traces count
+                        Use this number of traces at maximum for each keykyte
+                        estimation. By default, all traces in the tracefile
+                        are used.
+  -i index, --keybyte index
+                        Attack keybyte at index i. Can be specified multiple
+                        times. By default, all keybytes are tried.
+  -v, --verbose         Increases verbosity. Can be specified multiple times
+                        to increase.
+```
+
 
 ## Notes
 This attack is quite simple and simulation is not intended to replace actual
