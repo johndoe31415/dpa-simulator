@@ -1,6 +1,6 @@
 .*.swp
 *.o
 __pycache__
-aes128_test
+aes128/aes128_test
 simulator/simulator
 recovery/plots
