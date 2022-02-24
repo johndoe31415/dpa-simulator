@@ -2,22 +2,22 @@
 
 CFLAGS := $(CFLAGS) -std=c11
 CFLAGS += -Wall -Wmissing-prototypes -Wstrict-prototypes -Werror=implicit-function-declaration -Werror=format -Wimplicit-fallthrough -Wshadow
-CFLAGS += -Os -g3
+CFLAGS += -O3 -g3
 
 LDFLAGS := -lthumb2sim
 
-TARGETS := simulator
-OBJS :=
+TARGETS := trace_simulator
+OBJS := argparse.o
 
 all: $(TARGETS)
 
 clean:
 	rm -f $(OBJS) $(TARGETS)
 
-test: simulator
-	./simulator
+test: trace_simulator
+	./trace_simulator
 
-simulator: $(OBJS) simulator.c
+trace_simulator: $(OBJS) trace_simulator.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 .c.o:

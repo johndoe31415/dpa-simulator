@@ -2,5 +2,5 @@
 *.o
 __pycache__
 aes128/aes128_test
-simulator/simulator
+simulator/trace_simulator
 recovery/plots

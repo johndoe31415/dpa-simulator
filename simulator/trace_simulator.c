@@ -3,6 +3,17 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <thumb2sim/thumb2sim.h>
+#include "argparse.h"
+
+static struct pgmopts_t {
+	const char *output_directory;
+	const char *firmware_filename;
+	unsigned int trace_count;
+	uint8_t key[64];
+} pgmopts = {
+	.firmware_filename = ARGPARSE_DEFAULT_FIRMWARE,
+	.trace_count = ARGPARSE_DEFAULT_TRACECNT,
+};
 
 #define MAX_TRACE_LENGTH		(32 * 1024)
 #define RAM_SIZE_KB				128
@@ -119,7 +130,69 @@ static void syscall_exit(struct emu_ctx_t *emu_ctx, uint32_t status) {
 	usr->end_emulation = true;
 }
 
+static bool parse_hex(uint8_t *dest, const char *src, unsigned int max_length, argparse_errmsg_callback_t errmsg_callback) {
+	int sl = strlen(src);
+	if ((sl % 2) != 0) {
+		errmsg_callback("Could not parse \"%s\" as a hex string: length not divisible by 2.", src);
+		return false;
+	}
+
+	if ((sl / 2) > max_length) {
+		errmsg_callback("Could not parse \"%s\" as a hex string: too long, can only handle up to %d bytes.", src, max_length);
+		return false;
+	}
+
+	for (int i = 0; i < sl; i += 2) {
+		char digit[3];
+		digit[0] = src[i + 0];
+		digit[1] = src[i + 1];
+		digit[2] = 0;
+
+		char *end;
+		uint8_t value = strtoul(digit, &end, 16);
+		if (*end != 0) {
+			errmsg_callback("Could not parse \"%s\" as a hex string: digit at offset %d invalid.", src, i);
+			return false;
+		}
+
+		dest[i / 2] = value;
+	}
+
+	return true;
+}
+
+static bool argument_callback(enum argparse_option_t option, const char *value, argparse_errmsg_callback_t errmsg_callback) {
+	switch (option) {
+		case ARG_FIRMWARE:
+			pgmopts.firmware_filename = value;
+			break;
+
+		case ARG_TRACECNT:
+			pgmopts.trace_count = atoi(value);
+			break;
+
+		case ARG_OUTPUT_DIRECTORY:
+			pgmopts.output_directory = value;
+			break;
+
+		case ARG_KEY:
+			if (!parse_hex(pgmopts.key, value, sizeof(pgmopts.key), errmsg_callback)) {
+				return false;
+			}
+			break;
+	}
+	return true;
+}
+
+static bool plausibilization_callback(argparse_errmsg_option_callback_t errmsg_callback) {
+	return true;
+}
+
 int main(int argc, char **argv) {
+	argparse_parse_or_quit(argc, argv, argument_callback, plausibilization_callback);
+
+
+
 	const char *rom_image_filename = "aes128_rom.bin";
 	const struct hardware_params_t cpu_parameters = {
 		.rom_size_bytes = 1024 * 1024,
@@ -138,19 +211,18 @@ int main(int argc, char **argv) {
 	emu_ctx->emulator_syscall_write = syscall_write;
 	emu_ctx->emulator_syscall_exit = syscall_exit;
 
-	const uint8_t key[] = { 0xab, 0xeb, 0xd2, 0x3e, 0x6e, 0xee, 0xc2, 0xc2, 0xf2, 0x64, 0x8c, 0x47, 0x9b, 0xca, 0x6e, 0xba };
 	FILE *f = fopen("/dev/urandom", "r");
 	if (!f) {
 		perror("/dev/urandom");
 		exit(1);
 	}
 
-	for (unsigned int trace_no = 0; trace_no < 10000; trace_no++) {
+	for (unsigned int trace_no = 0; trace_no < pgmopts.trace_count; trace_no++) {
 		struct user_ctx_t user = {
 			.end_emulation = false,
 			.readstate = 0,
 		};
-		memcpy(user.key, key, 16);
+		memcpy(user.key, pgmopts.key, 16);
 		emu_ctx->user = &user;
 		if (fread(user.plaintext, 16, 1, f) != 1) {
 			perror("fread");
@@ -160,11 +232,13 @@ int main(int argc, char **argv) {
 		cpu_reset(emu_ctx);
 		cpu_run(emu_ctx);
 
-		mkdir("/tmp/traces", 0755);
+		mkdir(pgmopts.output_directory, 0755);
 
+		/* Yes, this sprintf/strlen cascade is neither efficient nor secure
+		 * (buffer overflow). Send a PR if you care. */
 		char output_filename[256];
 		output_filename[0] = 0;
-		sprintf(output_filename + strlen(output_filename), "/tmp/traces/AES128_enc_P_");
+		sprintf(output_filename + strlen(output_filename), "%s/trace_P_", pgmopts.output_directory);
 		for (int i = 0; i < 16; i++) {
 			sprintf(output_filename + strlen(output_filename), "%02x", user.plaintext[i]);
 		}
