@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <thumb2sim/thumb2sim.h>
 
 #define MAX_TRACE_LENGTH		(32 * 1024)
@@ -137,13 +138,12 @@ int main(int argc, char **argv) {
 	emu_ctx->emulator_syscall_write = syscall_write;
 	emu_ctx->emulator_syscall_exit = syscall_exit;
 
-	const uint8_t key[] = { 0x0c, 0xeb, 0xd2, 0x3e, 0x6e, 0xee, 0xc2, 0xc2, 0xf2, 0x64, 0x8c, 0x47, 0x9b, 0xca, 0x6e, 0xba };
+	const uint8_t key[] = { 0xab, 0xeb, 0xd2, 0x3e, 0x6e, 0xee, 0xc2, 0xc2, 0xf2, 0x64, 0x8c, 0x47, 0x9b, 0xca, 0x6e, 0xba };
 	FILE *f = fopen("/dev/urandom", "r");
 	if (!f) {
 		perror("/dev/urandom");
 		exit(1);
 	}
-
 
 	for (unsigned int trace_no = 0; trace_no < 10000; trace_no++) {
 		struct user_ctx_t user = {
@@ -160,6 +160,7 @@ int main(int argc, char **argv) {
 		cpu_reset(emu_ctx);
 		cpu_run(emu_ctx);
 
+		mkdir("/tmp/traces", 0755);
 
 		char output_filename[256];
 		output_filename[0] = 0;

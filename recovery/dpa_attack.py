@@ -22,7 +22,7 @@
 
 import sys
 import subprocess
-from FriendlyArgumentParser import FriendlyArgumentParser
+from FriendlyArgumentParser import FriendlyArgumentParser, baseint
 from Tracefile import Tracefile
 
 class DPAAttack():
@@ -49,6 +49,7 @@ class DPAAttack():
 		self._args = args
 		self._tracefile = Tracefile(self._args.tracefile)
 		self._key = bytearray(16)
+		self._keyguess_best_metric = { }
 
 	@property
 	def key(self):
@@ -78,6 +79,20 @@ class DPAAttack():
 	@staticmethod
 	def _diff_trace(trace1, trace2):
 		return [ x - y for (x, y) in zip(trace1, trace2) ]
+
+	@staticmethod
+	def _moving_average(trace, sample_count):
+		moving_avg = [ ]
+		bucket = [ ]
+		bucketsum = 0
+		for sample in trace:
+			bucket.append(sample)
+			bucketsum += sample
+			if len(bucket) > sample_count:
+				removed = bucket.pop(0)
+				bucketsum -= removed
+			moving_avg.append(bucketsum / len(bucket))
+		return moving_avg
 
 
 	def _attack_keybyte_with_guess(self, i, K):
@@ -117,6 +132,9 @@ class DPAAttack():
 		if (len(low_traces) == 0) or (len(high_traces) == 0):
 			print("Attacking keybyte %d with guess K = %02x failed: %3d low and %3d high candidates -- cannot compute differential trace; retry with more traces if the attack fails" % (i, K, len(low_traces), len(high_traces)))
 		else:
+			if self._args.moving_average > 1:
+				low_traces = [ self._moving_average(trace, self._args.moving_average) for trace in low_traces ]
+				high_traces = [ self._moving_average(trace, self._args.moving_average) for trace in high_traces ]
 
 			avg_low = self._avg_trace(low_traces)
 			avg_high = self._avg_trace(high_traces)
@@ -142,14 +160,23 @@ class DPAAttack():
 				""" % (plotfile, plotfile)).encode())
 
 			self._key[i] = self._best_guess[0]
+			self._keyguess_best_metric[i] = self._best_guess[1]
 
 
 	def _attack_keybyte(self, i):
 		self._best_guess = None
-		for K in range(256):
-			self._attack_keybyte_with_guess(i, K)
+		if len(self._args.keybyte_guess) == 0:
+			for K in range(256):
+				self._attack_keybyte_with_guess(i, K)
+		else:
+			for K in self._args.keybyte_guess:
+				self._attack_keybyte_with_guess(i, K)
+
 
 	def attack(self):
+		if self._args.correct_key is not None:
+			self._tracefile.correct_key = self._args.correct_key
+
 		if self._args.randomize:
 			self._tracefile.randomize()
 		if len(self._args.keybyte) == 0:
@@ -158,10 +185,20 @@ class DPAAttack():
 		else:
 			for i in self._args.keybyte:
 				self._attack_keybyte(i)
+
+	def print_results(self):
 		print("Recovered key after attack: %s" % (" ".join("%02x" % (x) for x in self._key)))
+		for (keybyte, metric) in sorted(self._keyguess_best_metric.items()):
+			text = "   %2d [%02x] metric %6.3f" % (keybyte, self._key[keybyte], metric)
+			if self._tracefile.correct_key is not None:
+				text += "  actual is [%02x] %s" % (self._tracefile.correct_key[keybyte], [ "FAIL", "" ][self._key[keybyte] == self._tracefile.correct_key[keybyte]])
+			print(text)
 
 
 parser = FriendlyArgumentParser(description = "Educational tool to demonstrate differential power analysis.")
+parser.add_argument("-k", "--correct-key", metavar = "hex", type = bytes.fromhex, help = "Use this is the known correct key. Must be given in hex notation.")
+parser.add_argument("-g", "--keybyte-guess", metavar = "value", type = baseint, action = "append", default = [ ], help = "Try only these keybyte guesses. Can be specified more than once. By default, all values are tried.")
+parser.add_argument("-a", "--moving-average", metavar = "samples", type = int, default = 1, help = "Before investigating traces, compute their moving average using this number of samples. Defaults to %(default)d.")
 parser.add_argument("-r", "--randomize", action = "store_true", help = "Randomly shuffle traces before starting.")
 parser.add_argument("-p", "--create-plots", action = "store_true", help = "Create gnuplot plots for each diffential trace.")
 parser.add_argument("-n", "--max-traces", metavar = "count", type = int, help = "Use this number of traces at maximum for each keykyte estimation. By default, all traces in the tracefile are used.")
@@ -172,3 +209,4 @@ args = parser.parse_args(sys.argv[1:])
 
 dpa = DPAAttack(args)
 dpa.attack()
+dpa.print_results()

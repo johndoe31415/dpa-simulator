@@ -31,10 +31,21 @@ class Tracefile():
 	def __init__(self, filename):
 		with open(filename) as f:
 			self._tracefile = json.load(f)
+		if "key" in self._tracefile["meta"]:
+			self._tracefile["meta"]["key"] = base64.b64decode(self._tracefile["meta"]["key"])
 		for trace in self._tracefile["traces"]:
 			trace["ciphertext"] = base64.b64decode(trace["ciphertext"])
 			trace["plaintext"] = base64.b64decode(trace["plaintext"])
 			trace["data"] = base64.b64decode(trace["data"])
+
+	@property
+	def correct_key(self):
+		return self._tracefile["meta"].get("key")
+
+	@correct_key.setter
+	def correct_key(self, value):
+		self.validate_key(value)
+		self._tracefile["meta"]["key"] = value
 
 	def randomize(self):
 		random.shuffle(self._tracefile["traces"])
