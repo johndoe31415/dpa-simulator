@@ -142,17 +142,17 @@ class DPAAttack():
 			Q = P ^ K
 			Qpost = self._AES_SBOX[Q]
 			if self._args.model == "hdist":
-				estimate = self._hweight(Q ^ Qpost)
+				estimate = self._hweight((Q ^ Qpost) & self._args.bytemask)
 			elif self._args.model == "hweight":
-				estimate = self._hweight(Qpost)
+				estimate = self._hweight(Qpost & self._args.bytemask)
 			else:
 				raise NotImplementedError(self._args.model)
 
-			if estimate <= 1:
-				# Low flip candidate
+			if estimate <= self._args.grouping_threshold[0]:
+				# Low candidate
 				low_traces.append(trace["data"])
-			elif estimate >= 7:
-				# High flip candidate
+			elif estimate >= self._args.grouping_threshold[1]:
+				# High candidate
 				high_traces.append(trace["data"])
 
 		if (len(low_traces) == 0) or (len(high_traces) == 0):
@@ -240,12 +240,17 @@ class DPAAttack():
 				text += "  actual is [%02x] %s" % (self._tracefile.correct_key[i], [ "FAIL", "" ][self._key[i] == self._tracefile.correct_key[i]])
 			print(text)
 
+def _threshold(text):
+	text = text.split(":")
+	return (int(text[0]), int(text[1]))
 
 parser = FriendlyArgumentParser(description = "Educational tool to demonstrate differential power analysis.")
 parser.add_argument("-V", "--validate-key", action = "store_true", help = "Validate if there's a key/plaintext/ciphertext match for all samples, even if that has been verified before.")
 parser.add_argument("-m", "--model", choices = [ "hdist", "hweight" ], default = "hdist", help = "Choose the model to use as estimator. Can be %(choices)s, defaults to %(default)s.")
 parser.add_argument("-k", "--correct-key", metavar = "hex", type = bytes.fromhex, help = "Use this is the known correct key. Must be given in hex notation.")
 parser.add_argument("-g", "--keybyte-guess", metavar = "value", type = baseint, action = "append", default = [ ], help = "Try only these keybyte guesses. Can be specified more than once. By default, all values are tried.")
+parser.add_argument("-M", "--bytemask", metavar = "value", type = baseint, default = 255, help = "Mask the checked bits with this value. Allows for bitwise attack on keys. Default is 0x%(default)x (which equals bytewise attack)")
+parser.add_argument("-t", "--grouping-threshold", metavar = "low:high", type = _threshold, default = [ 1, 7 ], help = "Gives a lower and upper threshold for grouping. Must be adjusted to [0, 1] for bitwise attacks. Defaults to %(default)s.")
 parser.add_argument("-a", "--moving-average", metavar = "samples", type = int, default = 1, help = "Before investigating traces, compute their moving average using this number of samples. Defaults to %(default)d.")
 parser.add_argument("-r", "--randomize", action = "store_true", help = "Randomly shuffle traces before starting.")
 parser.add_argument("-p", "--create-plots", action = "store_true", help = "Create gnuplot plots for each diffential trace.")
