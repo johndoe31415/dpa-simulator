@@ -23,6 +23,7 @@ import re
 import json
 import base64
 import random
+import struct
 from cryptography.hazmat.backends import default_backend
 import cryptography.hazmat.primitives.ciphers.modes
 import cryptography.hazmat.primitives.ciphers.algorithms
@@ -36,11 +37,25 @@ class Tracefile():
 		for trace in self._tracefile["traces"]:
 			trace["ciphertext"] = base64.b64decode(trace["ciphertext"])
 			trace["plaintext"] = base64.b64decode(trace["plaintext"])
-			trace["data"] = base64.b64decode(trace["data"])
+			trace["data"] = self._interpret_samples(base64.b64decode(trace["data"]))
+
+	def _interpret_samples(self, samples):
+		if self.format == "uint8_t":
+			# Return them verbatin as values from 0..255
+			return samples
+		elif self.format == "float":
+			fmt = "<%df" % (len(samples) // 4)
+			return struct.unpack(fmt, samples)
+		else:
+			raise NotImplementedError(self.format)
 
 	@property
 	def correct_key(self):
 		return self._tracefile["meta"].get("key")
+
+	@property
+	def format(self):
+		return self._tracefile["meta"].get("format", "uint8_t")
 
 	@correct_key.setter
 	def correct_key(self, value):
@@ -61,7 +76,6 @@ class Tracefile():
 		encryptor = cryptography.hazmat.primitives.ciphers.Cipher(cryptography.hazmat.primitives.ciphers.algorithms.AES(key = key), ecb, backend = backend).encryptor()
 		ciphertext = encryptor.update(plaintext) + encryptor.finalize()
 		return ciphertext
-
 
 	def validate_key(self, key):
 		if (self._tracefile["meta"]["algorithm"] == "AES-128") and (self._tracefile["meta"]["mode"] == "encrypt"):

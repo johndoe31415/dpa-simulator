@@ -52,6 +52,8 @@ class DPAAttack():
 		self._tracefile = Tracefile(self._args.tracefile)
 		self._key = bytearray(16)
 		self._keyguess_metrics = collections.defaultdict(dict)
+		if self._args.validate_key:
+			self._tracefile.validate_key(self._tracefile.correct_key)
 
 	@property
 	def key(self):
@@ -108,7 +110,7 @@ class DPAAttack():
 
 	def _get_best_keyguess_metrics(self, i, n):
 		tuples = [ (metric, keyguess) for (keyguess, metric) in self._keyguess_metrics[i].items() ]
-		tuples.sort()
+		tuples.sort(reverse = True)
 		return tuples[:n]
 
 	def _get_best_keyguess_metric(self, i):
@@ -139,17 +141,26 @@ class DPAAttack():
 
 			Q = P ^ K
 			Qpost = self._AES_SBOX[Q]
-			flips = self._hweight(Q ^ Qpost)
+			if self._args.model == "hdist":
+				estimate = self._hweight(Q ^ Qpost)
+			elif self._args.model == "hweight":
+				estimate = self._hweight(Qpost)
+			else:
+				raise NotImplementedError(self._args.model)
 
-			if flips <= 1:
+			if estimate <= 1:
 				# Low flip candidate
 				low_traces.append(trace["data"])
-			elif flips >= 7:
+			elif estimate >= 7:
 				# High flip candidate
 				high_traces.append(trace["data"])
 
 		if (len(low_traces) == 0) or (len(high_traces) == 0):
-			print("Attacking keybyte %d with guess K = %02x failed: %3d low and %3d high candidates -- cannot compute differential trace; retry with more traces if the attack fails" % (i, K, len(low_traces), len(high_traces)))
+			if self._tracefile.correct_key is not None:
+				correct_str = " [correct %02x]" % (self._tracefile.correct_key[i])
+			else:
+				correct_str = ""
+			print("Attacking keybyte %d with guess K = %02x%s failed: %3d low and %3d high candidates -- cannot compute differential trace; retry with more traces if the attack fails" % (i, K, correct_str, len(low_traces), len(high_traces)))
 		else:
 			if self._args.moving_average > 1:
 				low_traces = [ self._moving_average(trace, self._args.moving_average) for trace in low_traces ]
@@ -161,7 +172,11 @@ class DPAAttack():
 			metric = max(diff)
 			self._keyguess_metrics[i][K] = metric
 			(best_metric, best_keyguess) = self._get_best_keyguess_metric(i)
-			print("Attacking keybyte %d with guess K = %02x: %3d low and %3d high candidates; used %d traces of %d available (%.0f%%), grouped %d of those (%.0f%%); max diff %6.3f (best %02x %6.3f)" % (i, K, len(low_traces), len(high_traces), used_trace_count, self._tracefile.total_trace_count, used_trace_count / self._tracefile.total_trace_count * 100, len(low_traces) + len(high_traces), (len(low_traces) + len(high_traces)) / used_trace_count * 100, metric, best_keyguess, best_metric))
+			if self._tracefile.correct_key is not None:
+				correct_str = " [correct %02x]" % (self._tracefile.correct_key[i])
+			else:
+				correct_str = ""
+			print("Attacking keybyte %d with guess K = %02x%s: %3d low and %3d high candidates; used %d traces of %d available (%.0f%%), grouped %d of those (%.0f%%); max diff %6.3f (best %02x %6.3f)" % (i, K, correct_str, len(low_traces), len(high_traces), used_trace_count, self._tracefile.total_trace_count, used_trace_count / self._tracefile.total_trace_count * 100, len(low_traces) + len(high_traces), (len(low_traces) + len(high_traces)) / used_trace_count * 100, metric, best_keyguess, best_metric))
 
 			if self._args.create_plots:
 				plotfile = self._plot_filename(i, K)
@@ -227,6 +242,8 @@ class DPAAttack():
 
 
 parser = FriendlyArgumentParser(description = "Educational tool to demonstrate differential power analysis.")
+parser.add_argument("-V", "--validate-key", action = "store_true", help = "Validate if there's a key/plaintext/ciphertext match for all samples, even if that has been verified before.")
+parser.add_argument("-m", "--model", choices = [ "hdist", "hweight" ], default = "hdist", help = "Choose the model to use as estimator. Can be %(choices)s, defaults to %(default)s.")
 parser.add_argument("-k", "--correct-key", metavar = "hex", type = bytes.fromhex, help = "Use this is the known correct key. Must be given in hex notation.")
 parser.add_argument("-g", "--keybyte-guess", metavar = "value", type = baseint, action = "append", default = [ ], help = "Try only these keybyte guesses. Can be specified more than once. By default, all values are tried.")
 parser.add_argument("-a", "--moving-average", metavar = "samples", type = int, default = 1, help = "Before investigating traces, compute their moving average using this number of samples. Defaults to %(default)d.")
