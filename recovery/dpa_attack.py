@@ -186,10 +186,10 @@ class DPAAttack():
 
 				self._execute([ "gnuplot" ], input = ("""
 					set terminal pngcairo size 1920,1080 enhanced
-					set yrange [ -8 : 8 ]
+					set yrange [ %f : %f ]
 					set output '%s.png'
 					plot '%s' with lines
-				""" % (plotfile, plotfile)).encode())
+				""" % (-self._args.plot_absolute_value, self._args.plot_absolute_value, plotfile, plotfile)).encode())
 
 	def _attack_keybyte(self, i):
 		self._best_guess = None
@@ -212,10 +212,10 @@ class DPAAttack():
 			plotcmd = ", ".join("'%s' with lines %s" % (filename, extra) for (filename, extra) in plot_filenames)
 			self._execute([ "gnuplot" ], input = ("""
 				set terminal pngcairo size 1920,1080 enhanced
-				set yrange [ -10 : 10 ]
+				set yrange [ %f : %f ]
 				set output '%s'
 				plot %s
-			""" % (all_plot_pngfile, plotcmd)).encode())
+			""" % (-self._args.plot_absolute_value, self._args.plot_absolute_value, all_plot_pngfile, plotcmd)).encode())
 
 
 	def attack(self):
@@ -254,6 +254,7 @@ parser.add_argument("-t", "--grouping-threshold", metavar = "low:high", type = _
 parser.add_argument("-a", "--moving-average", metavar = "samples", type = int, default = 1, help = "Before investigating traces, compute their moving average using this number of samples. Defaults to %(default)d.")
 parser.add_argument("-r", "--randomize", action = "store_true", help = "Randomly shuffle traces before starting.")
 parser.add_argument("-p", "--create-plots", action = "store_true", help = "Create gnuplot plots for each diffential trace.")
+parser.add_argument("-P", "--plot-absolute-value", metavar = "value", type = float, default = 8.0, help = "For plots, gives the absolute value on the Y scale to use. Defaults to %(default).1f.")
 parser.add_argument("-n", "--max-traces", metavar = "count", type = int, help = "Use this number of traces at maximum for each keykyte estimation. By default, all traces in the tracefile are used.")
 parser.add_argument("-i", "--keybyte", metavar = "index", type = int, action = "append", default = [ ], help = "Attack keybyte at index i. Can be specified multiple times. By default, all keybytes are tried.")
 parser.add_argument("-v", "--verbose", action = "count", default = 0, help = "Increases verbosity. Can be specified multiple times to increase.")
